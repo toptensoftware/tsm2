@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 // Import the SerialPort module
 import { SerialPort } from 'serialport';
 import { SerialPortStream } from '@serialport/stream';

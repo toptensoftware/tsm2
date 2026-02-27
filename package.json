@@ -18,7 +18,7 @@
     "url": "https://github.com/toptensoftware/tsm2"
   },
   "author": "Topten Software",  
-  "license": "Apache-2.0",
+  "license": "MIT",
   "bin": {
     "tsm2": "./index.js"
   },
