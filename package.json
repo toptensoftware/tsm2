@@ -1,0 +1,30 @@
+{
+  "name": "tsm2",
+  "version": "2.0.0",
+  "main": "index.js",
+  "type": "module",
+  "description": "A tiny serial terminal program for Windows, Linux, and macOS.",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "contributors": [
+    {
+      "name": "Brad Robinson",
+      "email": "contact@toptensoftware.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toptensoftware/tsm2"
+  },
+  "author": "Topten Software",  
+  "license": "Apache-2.0",
+  "bin": {
+    "tsm2": "./index.js"
+  },
+  "preferGlobal": true,
+  "dependencies": {
+    "@toptensoftware/clargs": "github:toptensoftware/clargs",
+    "serialport": "^13.0.0"
+  }
+}
