@@ -7,6 +7,7 @@ import { autoDetect } from '@serialport/bindings-cpp'
 import { clargs, showPackageVersion, showArgs   } from "@toptensoftware/clargs";
 import { fileURLToPath } from 'url';
 import path from 'node:path';
+import net from 'node:net';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,21 +38,67 @@ async function listSerialPorts()
     }
 }
 
-function createPort(path, options)
+function isSerialPort(target)
+{
+    if (process.platform === 'win32')
+        return /^COM\d+$/i.test(target);
+    else
+        return target.startsWith('/dev/');
+}
+
+function parseTelnetTarget(target)
+{
+    const colonIndex = target.lastIndexOf(':');
+    if (colonIndex === -1)
+        return { host: target, port: 23 };
+    const host = target.slice(0, colonIndex);
+    const port = parseInt(target.slice(colonIndex + 1));
+    if (isNaN(port))
+        throw new Error(`invalid telnet port: ${target.slice(colonIndex + 1)}`);
+    return { host, port };
+}
+
+function connectStdin(connection, options)
+{
+    process.stdin.setRawMode(true)
+    process.stdin.on('data', input =>
+    {
+        for (const byte of input)
+        {
+            // ctrl+c
+            if (byte === 0x03)
+            {
+                connection.destroy ? connection.destroy() : connection.close()
+                process.exit(0)
+            }
+        }
+        connection.write(input)
+        if (options.echo)
+        {
+            process.stdout.write(input)
+        }
+    })
+    process.stdin.resume()
+
+    process.stdin.on('end', () =>
+    {
+        connection.destroy ? connection.destroy() : connection.close()
+        process.exit(0)
+    })
+}
+
+function createPort(portPath, options)
 {
     options = {
-        path,
+        path: portPath,
         ...options
     }
-
 
     console.log(`Opening serial port:`, options);
 
     options.binding = binding;
 
     const port = new SerialPortStream(options)
-    //const output = new OutputTranslator()
-    //output.pipe(process.stdout)
     port.pipe(process.stdout)
 
     port.on('error', (err) =>
@@ -66,30 +113,34 @@ function createPort(path, options)
         process.exit(err ? 1 : 0)
     })
 
-    process.stdin.setRawMode(true)
-    process.stdin.on('data', input =>
-    {
-        for (const byte of input) 
-        {
-            // ctrl+c
-            if (byte === 0x03) 
-            {
-                port.close()
-                process.exit(0)
-            }
-        }
-        port.write(input)
-        if (options.echo) 
-        {
-          process.stdout.write(input)
-        }
-    })
-    process.stdin.resume()
+    connectStdin(port, options)
+}
 
-    process.stdin.on('end', () =>
+function createTelnetConnection(target, options)
+{
+    const { host, port } = parseTelnetTarget(target);
+
+    console.log(`Connecting to telnet ${host}:${port}`);
+
+    const socket = net.createConnection({ host, port });
+
+    socket.pipe(process.stdout)
+
+    socket.on('error', (err) =>
     {
-        port.close()
-        process.exit(0)
+        console.error('Error', err)
+        process.exit(1)
+    })
+
+    socket.on('close', (hadError) =>
+    {
+        console.log('Closed')
+        process.exit(hadError ? 1 : 0)
+    })
+
+    socket.on('connect', () =>
+    {
+        connectStdin(socket, options)
     })
 }
 
@@ -101,7 +152,7 @@ try
     };
 
     let args = clargs();
-    let port = null;;
+    let target = null;;
     while (args.next())
     {
         switch (args.name)
@@ -139,7 +190,7 @@ try
                 break;
 
             case "parity":
-                options.parity = args.readEnumValue("none|even|odd|mark|space");    
+                options.parity = args.readEnumValue("none|even|odd|mark|space");
                 break;
 
             case "echo":
@@ -147,10 +198,10 @@ try
                 break;
 
             case null:
-                // unnamed arg eg: file.txt
-                if (port !== null)
-                    throw new Error(`multiple ports specified`);
-                port = args.readValue();
+                // unnamed arg eg: /dev/ttyACM0, COM3, or hostname[:port]
+                if (target !== null)
+                    throw new Error(`multiple targets specified`);
+                target = args.readValue();
                 break;
 
             default:
@@ -158,10 +209,13 @@ try
         }
     }
 
-    if (port === null)
-        throw new Error(`no port specified`);
+    if (target === null)
+        throw new Error(`no port or host specified`);
 
-    createPort(port, options);
+    if (isSerialPort(target))
+        createPort(target, options);
+    else
+        createTelnetConnection(target, options);
 }
 catch (err)
 {
@@ -173,7 +227,7 @@ function showHelp()
 {
     showVersion();
     console.log("");
-    console.log(`Usage: tsm [options] <port>`);
+    console.log(`Usage: ttsm [options] <port|host[:port]>`);
     console.log("");
     showArgs({
         "--help": "show this help message",
@@ -185,6 +239,9 @@ function showHelp()
         "--parity <type>": "set parity none|even|odd|mark|space (default: none)",
         "--echo <bool>": "echo input to output (default: false)",
     });
+    console.log("");
+    console.log("Serial port: /dev/ttyACM0 (Linux/macOS) or COM3 (Windows)");
+    console.log("Telnet:      hostname or hostname:port (default port: 23)");
 }
 
 function showVersion()
