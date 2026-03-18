@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "main": "index.js",
   "type": "module",
-  "description": "A tiny serial terminal program for Windows, Linux, and macOS.",
+  "description": "A tiny telnet & serial monitor for Windows, Linux, and macOS.",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -20,7 +20,7 @@
   "author": "Topten Software",  
   "license": "MIT",
   "bin": {
-    "tsm2": "./index.js"
+    "ttsm": "./index.js"
   },
   "preferGlobal": true,
   "dependencies": {

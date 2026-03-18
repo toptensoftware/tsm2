@@ -227,7 +227,7 @@ function showHelp()
 {
     showVersion();
     console.log("");
-    console.log(`Usage: tsm [options] <port|host[:port]>`);
+    console.log(`Usage: ttsm [options] <port|host[:port]>`);
     console.log("");
     showArgs({
         "--help": "show this help message",
