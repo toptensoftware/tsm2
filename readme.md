@@ -5,7 +5,7 @@ A simple cross-platform serial and telnet terminal for Windows, Linux, and macOS
 ## Installation
 
 ```bash
-sudo npm install -g toptensoftware/tsm2
+npm install -g toptensoftware/ttsm
 ```
 
 ## Usage
