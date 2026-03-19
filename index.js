@@ -8,6 +8,90 @@ import { clargs, showPackageVersion, showArgs   } from "@toptensoftware/clargs";
 import { fileURLToPath } from 'url';
 import path from 'node:path';
 import net from 'node:net';
+import { Transform } from 'node:stream';
+
+// Telnet protocol constants
+const IAC  = 0xFF;
+const WILL = 0xFB;
+const WONT = 0xFC;
+const DO   = 0xFD;
+const DONT = 0xFE;
+const SB   = 0xFA;
+const SE   = 0xF0;
+
+// Filter that strips telnet IAC negotiation sequences from the incoming stream
+// and sends back WONT/DONT refusals for any option requests.
+function createTelnetFilter(socket)
+{
+    let state = 'normal'; // normal | iac | cmd | sb | sb_iac
+    let cmd = 0;
+
+    return new Transform({
+        transform(chunk, encoding, callback)
+        {
+            const out = [];
+            for (const byte of chunk)
+            {
+                switch (state)
+                {
+                    case 'normal':
+                        if (byte === IAC)
+                            state = 'iac';
+                        else
+                            out.push(byte);
+                        break;
+
+                    case 'iac':
+                        if (byte === IAC)
+                        {
+                            // escaped 0xFF — literal data byte
+                            out.push(0xFF);
+                            state = 'normal';
+                        }
+                        else if (byte === SB)
+                        {
+                            state = 'sb';
+                        }
+                        else if (byte === WILL || byte === WONT || byte === DO || byte === DONT)
+                        {
+                            cmd = byte;
+                            state = 'cmd';
+                        }
+                        else
+                        {
+                            // single-byte command (e.g. GA, NOP) — ignore
+                            state = 'normal';
+                        }
+                        break;
+
+                    case 'cmd':
+                    {
+                        // byte is the option; refuse all options
+                        // DO x → WONT x,  WILL x → DONT x
+                        const replyCmd = (cmd === DO) ? WONT : (cmd === WILL) ? DONT : undefined;
+                        if (replyCmd !== undefined)
+                            socket.write(Buffer.from([IAC, replyCmd, byte]));
+                        state = 'normal';
+                        break;
+                    }
+
+                    case 'sb':
+                        // swallow subnegotiation bytes until IAC SE
+                        if (byte === IAC)
+                            state = 'sb_iac';
+                        break;
+
+                    case 'sb_iac':
+                        state = (byte === SE) ? 'normal' : 'sb';
+                        break;
+                }
+            }
+            if (out.length > 0)
+                this.push(Buffer.from(out));
+            callback();
+        }
+    });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,7 +208,7 @@ function createTelnetConnection(target, options)
 
     const socket = net.createConnection({ host, port });
 
-    socket.pipe(process.stdout)
+    socket.pipe(createTelnetFilter(socket)).pipe(process.stdout)
 
     socket.on('error', (err) =>
     {
